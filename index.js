@@ -3,10 +3,14 @@ const app = express();
 const cors = require('cors');
 const http = require('http').Server(app);
 const PORT = 4000;
+require('dotenv').config();
+
+const { Novu } = require('@novu/node');
+const novu = new Novu(process.env.NOVU_KEY);
 
 const socketIO = require('socket.io')(http, {
   cors: {
-    origin: 'http://localhost:3000',
+    origin: '*',
   },
 });
 
@@ -61,6 +65,22 @@ let tasks = {
   },
 };
 
+const sendNotification = async (user, id) => {
+  try {
+    const result = await novu.trigger(process.env.NOVU_TRIGGER_ID, {
+      to: {
+        subscriberId: process.env.NOVU_IDENTIFIER,
+      },
+      payload: {
+        userId: user,
+        id,
+      },
+    });
+  } catch (err) {
+    console.error('Error >>>>', { err });
+  }
+};
+
 socketIO.on('connection', (socket) => {
   console.log(`⚡: ${socket.id} user just connected!`);
 
@@ -82,14 +102,16 @@ socketIO.on('connection', (socket) => {
   });
 
   socket.on('createTask', (data) => {
+    const id = fetchID();
     const newTask = {
-      id: fetchID(),
+      id,
       title: data.task,
       comments: [],
     };
 
     tasks['pending'].items.push(newTask);
     socket.emit('tasks', tasks);
+    sendNotification(data.userId, id);
   });
 
   socket.on('addComment', (data) => {
